@@ -1,4 +1,4 @@
--record (job_center, {waitting_queue,
-                      processing_queue,
-                      done_list,
-                      job_number}).
+-record (job_queue, {waitting = queue:new(),
+                     processing = dict:new(),
+                     done = [],
+                     job_number = 1}).
