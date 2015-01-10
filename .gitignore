@@ -6,3 +6,6 @@
 
 # Ignore compiled module file.
 *.beam
+
+# Mac OS X DS_Store (Desktop Services Store) file
+.DS_Store
