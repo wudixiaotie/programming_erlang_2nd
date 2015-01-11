@@ -50,17 +50,6 @@ handle_work() ->
         handle_work()
     end.
 
-test_fun() ->
-    receive
-        aaa -> aaa
-    after 5000 ->
-        done
-    end.
-
-test() ->
-    F = fun() -> worker:test_fun() end,
-    worker:superviser({1, 10, F}).
-
 
 
 
