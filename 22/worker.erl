@@ -2,55 +2,64 @@
 
 -compile(export_all).
 
-% get_a_job_and_do() ->
-%     JobInfo = ?MODULE:work_wanted(),
-%     spawn_link(fun() -> worker_superviser(JobInfo) end),
-%     worker_superviser()
+get_a_job_and_do() ->
+    JobInfo = job_center:work_wanted(),
+    spawn_link(fun() -> superviser(JobInfo) end).
+
 
 superviser({JobNumber, JobTime, F}) ->
-    {WorkerPid, _Ref} = spawn_monitor(fun() -> work(JobNumber, F) end),
+    {WorkerPid, _Ref} = spawn_monitor(fun() -> work(F) end),
     receive
-        {done, WorkerPid} ->
-            ok;
-        {'DOWN', _Ref, process, WorkerPid, _Why} ->
-            % job_center:job_failed(JobNumber)
-            io:format("==========工作失败~n")
+        {'DOWN', _Ref, process, WorkerPid, normal} ->
+            job_center:job_done(JobNumber),
+            io:format("superviser: Work done!~n");
+        {'DOWN', _Ref, process, WorkerPid, Why} ->
+            job_center:job_failed(JobNumber),
+            io:format("superviser: Work failed! Because: ~p~n", [Why])
     after (JobTime - 1) * 1000 ->
-        WorkerPid ! hurry_up,
+        WorkerPid ! harry_up,
         receive
             {done, WorkerPid} -> ok
         after 2000 ->
-            exit(WorkerPid, youre_fired)
+            exit(WorkerPid, youre_fired),
+            io:format("superviser: Worker fired!~n")
         end
     end.
 
 
-work(JobNumber, F) ->
-    HandlerPid = spawn_link(fun() -> handle_work() end),
+work(F) ->
+    HandleWorkPid = self(),
     Fun = fun() ->
+        io:format("handle_work: Start to do the work!~n"),
         F(),
-        HandlerPid ! {done, JobNumber}
+        HandleWorkPid ! done
     end,
-    spawn_link(Fun).
+    spawn_link(Fun),
+    handle_work().
+
+
 handle_work() ->
     receive
         harry_up ->
-            io:format("Harry up, got it!~n");
-        {done, JobNumber} ->
-            io:format("Work done!~n"),
-            % job_center:job_done(JobNumber),
-            io:format("==========工作完成~n")
+            io:format("handle_work: Harry up, got it!~n"),
+            handle_work();
+        done ->
+            io:format("handle_work: Work done!~n")
     after 1000 ->
-        io:format("I'm working!~n"),
+        io:format("handle_work: I'm working!~n"),
         handle_work()
     end.
 
-test() ->
+test_fun() ->
     receive
         aaa -> aaa
+    after 5000 ->
+        done
     end.
 
-
+test() ->
+    F = fun() -> worker:test_fun() end,
+    worker:superviser({1, 10, F}).
 
 
 
