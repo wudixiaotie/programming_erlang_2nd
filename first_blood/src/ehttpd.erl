@@ -18,7 +18,7 @@ listen(Port, N) ->
             {backlog, 256},
             {packet, http_bin},
             {raw,6,9,<<1:32/native>>}, %defer accept
-            %%{delay_send,true},
+            {delay_send,true},
             %%{nodelay,true},
             {reuseaddr, true}],
  

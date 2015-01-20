@@ -1,22 +1,51 @@
 -module (http_server).
 
 -export ([start/0, start/1, stop/0]).
+
+-define (DEFAULT_PORT, 1987).
+-define (DEFAULT_ACCPEPTOR_COUNT, 10).
+-define (DEF_PORT, 1987).
+-define (DEF_PORT, 1987).
+-define (DEF_PORT, 1987).
+-define (DEF_PORT, 1987).
+-define (DEF_PORT, 1987).
+
 % http://erlang.org/doc/apps/inets/http_server.html
+% spawn_opt是啥？
+% erlang:system_info(schedulers)是啥？
 start() ->
-    start(1987).
+    start(?DEFAULT_PORT).
 
 start(Port) ->
     io:format("start_server: http://localhost:~p~n", [Port]),
-    % register(ws_server, spawn(fun() -> start_ws_server(Port) end)).
-    start_ws_server(Port).
+    register(ws_server, spawn(fun() -> listen(Port, ?DEFAULT_ACCPEPT_COUNT) end)).
 
-start_ws_server(Port) ->
-    {ok, ListenSocket} = gen_tcp:listen(Port, [binary, {packet, 0},
-                                         {reuseaddr, true},
-                                         {active, true}]),
+start(Port, AcceptorCount) ->
+    io:format("start_server: http://localhost:~p~n", [Port]),
+    register(ws_server, spawn(fun() -> listen(Port, AcceptorCount) end)).
+
+listen(Port, AcceptorCount) ->
+    Opts = [{active, false},
+            binary,
+            {backlog, 512},
+            {packet, http_bin},
+            {raw,6,9,<<1:32/native>>}, %defer accept
+            {delay_send,true},
+            %%{nodelay,true},
+            {reuseaddr, true}],
+    {ok, ListenSocket} = gen_tcp:listen(Port, Opts),
+    Fun = fun(I) ->
+                    register(list_to_atom("acceptor_" ++ integer_to_list(I)),
+                             spawn_opt(?MODULE, accept, [S, I], [link, {scheduler, I}]))
+            end,
+    lists:foreach(Fun, lists:seq(1, AcceptorCount)).
+
+accept(ListenSocket) ->
+    io:format("accept pid:~p~n", [self()]),
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
-            spawn(fun() -> loop(Socket) end);
+            spawn(fun() -> accept(ListenSocket) end),
+            loop(Socket);
         {error, Why} ->
             io:format("ListenSocket stoped:~p~n", [Why])
     end.
