@@ -10,6 +10,11 @@ start() ->
 
 
 start(Port) ->
+    Pid = spawn(fun() -> listen(Port) end),
+    register(ws_server, Pid).
+
+
+listen(Port) ->
     io:format("start websocket server: http://localhost:~p~n", [Port]),
     Opts = [binary,
             {packet, 0},
@@ -17,23 +22,22 @@ start(Port) ->
             {active, true}],
     {ok, ListenSocket} = gen_tcp:listen(Port, Opts),
     parallel_connect(ListenSocket),
-    register(ws_server, self()),
     receive
         stop ->
-            io:format("stop websocket server!")
+            io:format("websocket server: http://localhost:~p stopped~n!", [Port])
     end.
 
 
 parallel_connect(ListenSocket) ->
     {ok, Socket} = gen_tcp:accept(ListenSocket),
-    spawn(fun() -> parallel_connect(ListenSocket) end),
+    spawn_link(fun() -> parallel_connect(ListenSocket) end),
     shake_hand(Socket).
 
 
 shake_hand(Socket) ->
     receive
         {tcp, Socket, Bin} ->
-            io:format("receive_request received binary = ~p~n", [Bin]),
+            % io:format("receive_request received binary = ~p~n", [Bin]),
             HeaderList = binary:split(Bin, <<"\r\n">>, [global]),
             HeaderTupleList =[ list_to_tuple(binary:split(Header, <<": ">>)) || Header <- HeaderList ],
             {_, SecWebSocketKey} = lists:keyfind(<<"Sec-WebSocket-Key">>, 1, HeaderTupleList),
@@ -49,7 +53,7 @@ shake_hand(Socket) ->
             gen_tcp:send(Socket, HandshakeHeader),
             frame_handler(Socket);
         Any ->
-            io:format("receive_request received: ~p.~n", [Any])
+            io:format("receive_request received non_tcp: ~p.~n", [Any])
     end.
 
 
@@ -61,7 +65,7 @@ frame_handler(WebsocketSocket) ->
         {tcp_closed, WebsocketSocket} ->
             gen_tcp:close(WebsocketSocket);
         Any ->
-            io:format("websocket_handler received:~p~n", [Any]),
+            io:format("websocket_handler received non_tcp:~p~n", [Any]),
             frame_handler(WebsocketSocket)
     end.
 
@@ -71,9 +75,8 @@ handle_data(FirstPacket, WebsocketSocket) ->
     case unicode:characters_to_list(PayloadOriginalData) of
         {incomplete, _, _} ->
             gen_tcp:close(WebsocketSocket);
-        Str ->
-            io:format("handle_data str:~p~n", [Str]),
-            Frame = build_frame(Str),
+        PayloadContent ->
+            Frame = build_frame(PayloadContent),
             gen_tcp:send(WebsocketSocket, Frame),
             case size(NextPacketData) of
                 0 -> frame_handler(WebsocketSocket);
@@ -115,7 +118,7 @@ receive_rest_data(WebsocketSocket, PayloadLength, ReceivedData) ->
                 {tcp_closed, WebsocketSocket} ->
                     gen_tcp:close(WebsocketSocket);
                 Any ->
-                    io:format("receive_rest_data received:~p~n", [Any]),
+                    io:format("receive_rest_data received non_tcp:~p~n", [Any]),
                     receive_rest_data(WebsocketSocket, PayloadLength, ReceivedData)
             end;
         false ->
