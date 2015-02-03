@@ -10,25 +10,27 @@ start() ->
 
 
 start(Port) ->
-    Pid = spawn(fun() -> listen(Port) end),
-    register(ws_server, Pid).
+    register(ws_server, spawn(fun() -> listen(Port) end)).
 
 
 listen(Port) ->
+    process_flag(trap_exit, true),
     io:format("start websocket server: http://localhost:~p~n", [Port]),
     Opts = [binary,
             {packet, 0},
             {reuseaddr, true},
             {active, true}],
     {ok, ListenSocket} = gen_tcp:listen(Port, Opts),
-    parallel_connect(ListenSocket),
+    spawn_link(fun() -> parallel_connect(ListenSocket) end),
     receive
-        stop ->
-            io:format("websocket server: http://localhost:~p stopped~n!", [Port])
+        {'EXIT', _Pid, Why} ->
+            io:format("server http://localhost:~p has down, because ~p!~n", [Port, Why]),
+            exit(stop)
     end.
 
 
 parallel_connect(ListenSocket) ->
+    io:format("linked parallel_connect:~p~n", [self()]),
     {ok, Socket} = gen_tcp:accept(ListenSocket),
     spawn_link(fun() -> parallel_connect(ListenSocket) end),
     shake_hand(Socket).
@@ -158,9 +160,14 @@ build_frame(Content) ->
         (DataLength >= 125) and (DataLength =< 65535) ->
             <<1:1, 0:3, 1:4, 0:1, 126:7, DataLength:16, Bin/binary>>;
         DataLength > 65535 ->
-            <<1:1, 0:3, 1:4, 0:1, 127:7, DataLength:32, Bin/binary>>
+            <<1:1, 0:3, 1:4, 0:1, 127:7, DataLength:64, Bin/binary>>
     end.
 
 
 stop() ->
-    ws_server ! stop.
+    case whereis(ws_server) of
+        undefined ->
+            io:format("server not running!~n");
+        Pid ->
+            exit(Pid, stop)
+    end.
