@@ -1,4 +1,4 @@
--module (ws_server).
+-module (websocket_server).
 
 -export ([start/0, start/1, stop/0]).
 
@@ -10,7 +10,7 @@ start() ->
 
 
 start(Port) ->
-    register(ws_server, spawn(fun() -> listen(Port) end)).
+    register(?MODULE, spawn(fun() -> listen(Port) end)).
 
 
 listen(Port) ->
@@ -21,7 +21,7 @@ listen(Port) ->
             {reuseaddr, true},
             {active, true}],
     {ok, ListenSocket} = gen_tcp:listen(Port, Opts),
-    spawn_link(fun() -> parallel_connect(ListenSocket) end),
+    spawn(fun() -> parallel_connect(ListenSocket) end),
     receive
         {'EXIT', _Pid, Why} ->
             io:format("server http://localhost:~p has down, because ~p!~n", [Port, Why]),
@@ -32,7 +32,7 @@ listen(Port) ->
 parallel_connect(ListenSocket) ->
     io:format("linked parallel_connect:~p~n", [self()]),
     {ok, Socket} = gen_tcp:accept(ListenSocket),
-    spawn_link(fun() -> parallel_connect(ListenSocket) end),
+    spawn(fun() -> parallel_connect(ListenSocket) end),
     shake_hand(Socket).
 
 
@@ -165,7 +165,7 @@ build_frame(Content) ->
 
 
 stop() ->
-    case whereis(ws_server) of
+    case whereis(?MODULE) of
         undefined ->
             io:format("server not running!~n");
         Pid ->
